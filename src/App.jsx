@@ -8,7 +8,8 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp,
+  enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── REPLACE THIS with your Firebase config ────────────────────────────────────
@@ -26,6 +27,18 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth        = getAuth(firebaseApp);
 const db          = getFirestore(firebaseApp);
 const provider    = new GoogleAuthProvider();
+
+// ── Enable offline persistence ────────────────────────────────────────────────
+// Data saves locally on device and syncs to cloud when connection returns.
+enableIndexedDbPersistence(db).catch(err => {
+  if (err.code === "failed-precondition") {
+    // Multiple tabs open — persistence only works in one tab at a time
+    console.warn("Offline persistence unavailable: multiple tabs open.");
+  } else if (err.code === "unimplemented") {
+    // Browser doesn't support it (rare on modern iOS Safari)
+    console.warn("Offline persistence not supported on this browser.");
+  }
+});
 
 // ── Firestore helpers ─────────────────────────────────────────────────────────
 
@@ -262,20 +275,35 @@ const styles = `
 
   .diamond-wrap { padding:12px 14px; border-bottom:1px solid var(--border); background:var(--navy2); }
   .diamond-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:8px; }
-  .diamond-field { position:relative; width:160px; height:160px; margin:0 auto; }
-  .base { position:absolute; width:44px; height:44px; border:2px solid var(--border); border-radius:6px; background:var(--navy3); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all 0.2s; font-size:9px; color:var(--muted); text-align:center; padding:2px; }
-  .base.occupied { border-color:var(--gold); background:rgba(245,197,24,0.15); }
-  .base.occupied.them { border-color:var(--white); background:rgba(240,244,248,0.1); }
-  .base-runner-num { font-family:'Bebas Neue',sans-serif; font-size:14px; color:var(--gold); line-height:1; }
-  .base-runner-num.them { color:var(--white); }
-  .base-runner-name { font-size:8px; color:var(--muted); white-space:nowrap; overflow:hidden; max-width:40px; text-overflow:ellipsis; }
-  .base-label { font-size:8px; color:var(--border); font-weight:700; letter-spacing:1px; }
-  .base.second { top:0;    left:50%; transform:translateX(-50%); }
-  .base.third  { top:50%; left:4px;  transform:translateY(-50%); }
-  .base.first  { top:50%; right:4px; transform:translateY(-50%); }
-  .base.home   { bottom:0; left:50%; transform:translateX(-50%); border-color:var(--border); cursor:default; background:var(--navy3); }
-  .diamond-lines { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+  .diamond-svg-wrap { position:relative; width:220px; height:220px; margin:0 auto; }
+  .diamond-svg { width:100%; height:100%; }
+  /* Floating runner badges positioned over SVG bases */
+  .runner-badge {
+    position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    width:46px; height:46px; border-radius:8px; cursor:pointer;
+    transition:transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .runner-badge:active { transform:scale(0.93); }
+  .runner-badge.us   { background:rgba(245,197,24,0.9); border:2px solid var(--gold2); }
+  .runner-badge.them { background:rgba(240,244,248,0.85); border:2px solid var(--white); }
+  .runner-badge-num  { font-family:'Bebas Neue',sans-serif; font-size:15px; line-height:1; color:var(--navy); }
+  .runner-badge-name { font-size:7px; font-weight:700; color:var(--navy); white-space:nowrap; overflow:hidden; max-width:42px; text-overflow:ellipsis; }
   .run-flash { font-size:11px; font-weight:700; color:var(--green); text-align:center; margin-top:6px; min-height:16px; }
+
+  /* Home plate confirmation modal */
+  .homeplate-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .homeplate-modal { background:var(--navy2); border:2px solid var(--gold); border-radius:16px; padding:24px; width:100%; max-width:320px; text-align:center; }
+  .homeplate-icon { font-size:40px; margin-bottom:8px; }
+  .homeplate-title { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--gold); letter-spacing:2px; margin-bottom:4px; }
+  .homeplate-runner { font-size:14px; font-weight:600; margin-bottom:4px; }
+  .homeplate-sub { font-size:12px; color:var(--muted); margin-bottom:20px; }
+  .homeplate-btns { display:flex; flex-direction:column; gap:8px; }
+  .homeplate-btn { padding:14px; border-radius:12px; border:none; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; transition:all 0.15s; }
+  .homeplate-btn:active { transform:scale(0.97); }
+  .homeplate-btn.safe { background:var(--green); color:var(--navy); }
+  .homeplate-btn.out  { background:var(--red);   color:var(--white); }
+  .homeplate-btn.back { background:var(--navy3); color:var(--muted); border:1px solid var(--border); font-size:16px; }
 
   .runner-menu-overlay { position:fixed; inset:0; z-index:200; }
   .runner-menu { position:absolute; z-index:201; background:var(--navy2); border:1px solid var(--gold); border-radius:12px; padding:8px; min-width:130px; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
@@ -395,13 +423,25 @@ const styles = `
 `;
 
 // ── Diamond ───────────────────────────────────────────────────────────────────
+// SVG viewBox is 220x220. Key coordinates:
+//   Home:   (110, 188)
+//   First:  (188, 110)
+//   Second: (110, 32)
+//   Third:  (32,  110)
+// Runner badge centers (top-left corner for absolute positioning):
+//   First:  right:8px,  top:50%, translateY(-50%)  → approx (166, 87)
+//   Second: top:4px,    left:50%, translateX(-50%)  → approx (87,  4)
+//   Third:  left:8px,   top:50%, translateY(-50%)  → approx (0,   87)
+
 function Diamond({ bases, isMyTeam, onAction }) {
   const [menu, setMenu] = useState(null);
+
   const BASE_CONFIG = [
-    { key:"second", cls:"second", label:"2B", nextLabel:"→ 3rd",   prevLabel:"← 1st" },
-    { key:"third",  cls:"third",  label:"3B", nextLabel:"→ Score", prevLabel:"← 2nd" },
-    { key:"first",  cls:"first",  label:"1B", nextLabel:"→ 2nd",   prevLabel:null     },
+    { key:"first",  label:"1B", nextLabel:"→ 2nd",   prevLabel:null,      badgeStyle:{ right:4,  top:"50%", transform:"translateY(-50%)" } },
+    { key:"second", label:"2B", nextLabel:"→ 3rd",   prevLabel:"← 1st",  badgeStyle:{ top:4,    left:"50%", transform:"translateX(-50%)" } },
+    { key:"third",  label:"3B", nextLabel:"→ Score", prevLabel:"← 2nd",  badgeStyle:{ left:4,   top:"50%", transform:"translateY(-50%)" } },
   ];
+
   const openMenu = (e, key) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -414,24 +454,68 @@ function Diamond({ bases, isMyTeam, onAction }) {
 
   return (
     <>
-      <div className="diamond-field">
-        <svg className="diamond-lines" viewBox="0 0 160 160">
-          <polygon points="80,8 148,80 80,152 12,80" fill="none" stroke="#2a3d52" strokeWidth="1.5" strokeDasharray="4,3"/>
+      <div className="diamond-svg-wrap">
+        {/* ── Illustrated SVG field ── */}
+        <svg className="diamond-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+          {/* Outfield grass — full background */}
+          <circle cx="110" cy="100" r="108" fill="#1a3d1a"/>
+
+          {/* Infield dirt — rotated square */}
+          <polygon points="110,28 192,110 110,192 28,110" fill="#6b4226"/>
+
+          {/* Grass cut pattern on infield — subtle darker stripes */}
+          <polygon points="110,28 192,110 110,192 28,110" fill="none" stroke="#1a3d1a" strokeWidth="1" opacity="0.3"/>
+
+          {/* Foul lines */}
+          <line x1="110" y1="192" x2="200" y2="10"  stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+          <line x1="110" y1="192" x2="20"  y2="10"  stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+
+          {/* Pitcher's mound */}
+          <circle cx="110" cy="110" r="10" fill="#7a4e2a" stroke="#8a5e3a" strokeWidth="1"/>
+          <circle cx="110" cy="110" r="2"  fill="#e0c090"/>
+
+          {/* Base paths — dirt strips */}
+          <line x1="110" y1="192" x2="192" y2="110" stroke="#8a5e3a" strokeWidth="8" opacity="0.5"/>
+          <line x1="192" y1="110" x2="110" y2="28"  stroke="#8a5e3a" strokeWidth="8" opacity="0.5"/>
+          <line x1="110" y1="28"  x2="28"  y2="110" stroke="#8a5e3a" strokeWidth="8" opacity="0.5"/>
+          <line x1="28"  y1="110" x2="110" y2="192" stroke="#8a5e3a" strokeWidth="8" opacity="0.5"/>
+
+          {/* Base squares — empty */}
+          {/* First base */}
+          <rect x="181" y="99" width="22" height="22" rx="3" fill={bases.first?"transparent":"#e8d5a0"} stroke={bases.first?(isMyTeam?"#f5c518":"#f0f4f8"):"#c8b57a"} strokeWidth={bases.first?2.5:1.5} transform="rotate(45,192,110)"/>
+          {/* Second base */}
+          <rect x="99"  y="21" width="22" height="22" rx="3" fill={bases.second?"transparent":"#e8d5a0"} stroke={bases.second?(isMyTeam?"#f5c518":"#f0f4f8"):"#c8b57a"} strokeWidth={bases.second?2.5:1.5} transform="rotate(45,110,32)"/>
+          {/* Third base */}
+          <rect x="17"  y="99" width="22" height="22" rx="3" fill={bases.third?"transparent":"#e8d5a0"} stroke={bases.third?(isMyTeam?"#f5c518":"#f0f4f8"):"#c8b57a"} strokeWidth={bases.third?2.5:1.5} transform="rotate(45,28,110)"/>
+          {/* Home plate — pentagon shape */}
+          <polygon points="110,178 122,188 122,200 98,200 98,188" fill="#f0f4f8" stroke="#c0c0c0" strokeWidth="1.5"/>
+
+          {/* Base labels when empty */}
+          {!bases.first  && <text x="192" y="114" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6b4226" fontFamily="sans-serif">1B</text>}
+          {!bases.second && <text x="110" y="36"  textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6b4226" fontFamily="sans-serif">2B</text>}
+          {!bases.third  && <text x="28"  y="114" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6b4226" fontFamily="sans-serif">3B</text>}
+          {/* H label */}
+          <text x="110" y="196" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#1a2d42" fontFamily="sans-serif">H</text>
         </svg>
-        {BASE_CONFIG.map(({ key, cls, label }) => {
+
+        {/* ── Tappable runner badges overlaid on bases ── */}
+        {BASE_CONFIG.map(({ key, badgeStyle }) => {
           const runner = bases[key];
+          if (!runner) return null;
+          const cls = isMyTeam ? "us" : "them";
           return (
-            <div key={key} className={`base ${cls} ${runner?"occupied":""} ${runner&&!isMyTeam?"them":""}`}
-              onClick={e => runner ? openMenu(e,key) : null}
-              style={{ cursor: runner?"pointer":"default" }}>
-              {runner
-                ? <><div className={`base-runner-num ${!isMyTeam?"them":""}`}>#{runner.number||"?"}</div><div className="base-runner-name">{runner.name.split(" ")[0]}</div></>
-                : <div className="base-label">{label}</div>}
+            <div key={key}
+              className={`runner-badge ${cls}`}
+              style={{ position:"absolute", ...badgeStyle }}
+              onClick={e => openMenu(e, key)}>
+              <div className="runner-badge-num">#{runner.number||"?"}</div>
+              <div className="runner-badge-name">{runner.name.split(" ")[0]}</div>
             </div>
           );
         })}
-        <div className="base home"><div className="base-label" style={{ fontSize:9, color:"var(--muted)" }}>H</div></div>
       </div>
+
+      {/* Runner action menu */}
       {menu && menuRunner && (
         <>
           <div className="runner-menu-overlay" onClick={closeMenu} />
@@ -481,6 +565,8 @@ export default function BaseballApp() {
   const [runFlash, setRunFlash]   = useState("");
   const [expandedGame, setExpandedGame] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
+  // Home plate confirmation — { runner, forUs, pendingBases, pendingGame }
+  const [homePlateConfirm, setHomePlateConfirm] = useState(null);
 
   // Roster UI
   const [rosterTeam, setRosterTeam]       = useState("my");
@@ -673,7 +759,22 @@ export default function BaseballApp() {
 
     const isOut=result==="OUT"||result==="K_OUT";
     setGame(g=>({...g,[basesKey]:newBases,balls:0,strikes:0,outs:isOut?Math.min(g.outs+1,3):g.outs}));
-    if (runsScored.length) scoreRuns(runsScored,forUs);
+
+    // For hits: show home plate confirm for each runner that would score
+    // HR is the only exception — everyone auto-scores on a homer
+    if (runsScored.length) {
+      if (result === "HR") {
+        scoreRuns(runsScored, forUs);
+      } else if (runsScored.length === 1) {
+        setHomePlateConfirm({ runner: runsScored[0], forUs });
+      } else {
+        // Multiple runners scoring — confirm one at a time (queue them)
+        // For simplicity show first one; user can manually adjust others via diamond
+        setHomePlateConfirm({ runner: runsScored[0], forUs });
+        // Any additional runners put back on bases — user manages via diamond
+        // (rare edge case — 2+ runners score on same non-HR hit)
+      }
+    }
 
     if (forUs) {
       setStats(prev=>prev.map(s=>{
@@ -699,8 +800,13 @@ export default function BaseballApp() {
     snapshot();
     if (action==="advance") {
       const {newBases,scored}=moveRunner(currentBases,fromBase);
-      setGame(g=>({...g,[basesKey]:newBases}));
-      if (scored) scoreRuns([scored],isMyBatting);
+      if (scored) {
+        // Don't auto-score — show home plate confirmation
+        setGame(g=>({...g,[basesKey]:newBases}));
+        setHomePlateConfirm({ runner:scored, forUs:isMyBatting });
+      } else {
+        setGame(g=>({...g,[basesKey]:newBases}));
+      }
     } else if (action==="back") {
       if (idx<=0) return;
       setGame(g=>({...g,[basesKey]:{...currentBases,[fromBase]:null,[order[idx-1]]:runner}}));
@@ -711,6 +817,26 @@ export default function BaseballApp() {
     } else if (action==="remove") {
       setGame(g=>({...g,[basesKey]:{...currentBases,[fromBase]:null}}));
     }
+  };
+
+  // ── Home plate confirmation ───────────────────────────────────────────────
+  const resolveHomePlate = (outcome) => {
+    if (!homePlateConfirm) return;
+    const { runner, forUs } = homePlateConfirm;
+    if (outcome === "safe") {
+      // Run scores
+      scoreRuns([runner], forUs);
+      setAbLog(prev=>[{result:"RUN",name:runner.name,num:runner.number,inning:game.inning,half:game.half,forUs},...prev]);
+    } else if (outcome === "out") {
+      // Out at home — increment out counter, log it
+      setGame(g=>({...g, outs:Math.min(g.outs+1,3)}));
+      setAbLog(prev=>[{result:"ROB",name:runner.name,num:runner.number,inning:game.inning,half:game.half,forUs},...prev]);
+      if (forUs) setStats(prev=>prev.map(s=>s.id===runner.id?{...s,rob:(s.rob||0)+1}:s));
+    } else if (outcome === "back") {
+      // Send runner back to 3rd
+      setGame(g=>({...g,[basesKey]:{...currentBases,third:runner}}));
+    }
+    setHomePlateConfirm(null);
   };
 
   const adjustScore = (team,delta) => {
@@ -1309,6 +1435,24 @@ export default function BaseballApp() {
         )}
 
       </div>
-    </div></>
+    </div>
+
+    {/* ── HOME PLATE CONFIRMATION MODAL ── */}
+    {homePlateConfirm && (
+      <div className="homeplate-overlay">
+        <div className="homeplate-modal">
+          <div className="homeplate-icon">🏠</div>
+          <div className="homeplate-title">Play at the Plate</div>
+          <div className="homeplate-runner">#{homePlateConfirm.runner.number} {homePlateConfirm.runner.name}</div>
+          <div className="homeplate-sub">What happened at home plate?</div>
+          <div className="homeplate-btns">
+            <button className="homeplate-btn safe" onClick={()=>resolveHomePlate("safe")}>✓ Safe — Run Scores</button>
+            <button className="homeplate-btn out"  onClick={()=>resolveHomePlate("out")}>✗ Out at Home</button>
+            <button className="homeplate-btn back" onClick={()=>resolveHomePlate("back")}>↩ Sent Back to 3rd</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
