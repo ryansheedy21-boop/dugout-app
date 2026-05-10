@@ -944,22 +944,31 @@ export default function BaseballApp() {
     setNewPlayer({name:"",number:"",pos:"OF"}); setAddingPlayer(null);
   };
 
-  // Quick-add opponent player directly from score screen
-  const quickAddOppPlayer = () => {
+  // Quick-add player directly from score screen — works for both teams
+  const quickAddPlayer = () => {
     if (!quickAddNum.trim() || !game) return;
-    const oppName = game.oppName;
-    setOppTeams(prev => prev.map(t => {
-      if (t.name !== oppName) return t;
-      const maxOrder = t.roster.length ? Math.max(...t.roster.map(p=>p.order)) : 0;
-      const p = {
-        id: Date.now(),
-        name: quickAddName.trim() || `#${quickAddNum.trim()}`,
-        number: quickAddNum.trim(),
-        pos: "OF",
-        order: maxOrder + 1,
-      };
-      return { ...t, roster: [...t.roster, p] };
-    }));
+    const p = {
+      id: Date.now(),
+      name: quickAddName.trim() || `#${quickAddNum.trim()}`,
+      number: quickAddNum.trim(),
+      pos: "OF",
+      order: 0,
+    };
+    if (isMyBatting) {
+      // Add to my team
+      const maxOrder = myTeam.roster.length ? Math.max(...myTeam.roster.map(r=>r.order)) : 0;
+      p.order = maxOrder + 1;
+      setMyTeam(t => ({ ...t, roster: [...t.roster, p] }));
+      setStats(s => [...s, mkStat(p.id)]);
+    } else {
+      // Add to opponent team
+      setOppTeams(prev => prev.map(t => {
+        if (t.name !== game.oppName) return t;
+        const maxOrder = t.roster.length ? Math.max(...t.roster.map(r=>r.order)) : 0;
+        p.order = maxOrder + 1;
+        return { ...t, roster: [...t.roster, p] };
+      }));
+    }
     setQuickAddNum(""); setQuickAddName(""); setShowQuickAdd(false);
   };
   const removeOppPlayer = (tid,pid) => setOppTeams(prev=>prev.map(t=>t.id!==tid?t:{...t,roster:t.roster.filter(p=>p.id!==pid)}));
@@ -1247,28 +1256,26 @@ export default function BaseballApp() {
                           </div>
                         );
                       })}
-                      {/* Quick-add button — only show for opponent */}
-                      {!isMyBatting && (
-                        <div className="lineup-chip" style={{borderColor:"var(--blue)",minWidth:36}}
-                          onClick={()=>setShowQuickAdd(true)}>
-                          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"var(--blue)",lineHeight:1}}>+</div>
-                          <div className="lineup-chip-name" style={{color:"var(--blue)"}}>add</div>
-                        </div>
-                      )}
+                      {/* Quick-add button — both teams */}
+                      <div className="lineup-chip" style={{borderColor:"var(--blue)",minWidth:36}}
+                        onClick={()=>setShowQuickAdd(true)}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"var(--blue)",lineHeight:1}}>+</div>
+                        <div className="lineup-chip-name" style={{color:"var(--blue)"}}>add</div>
+                      </div>
                     </div>
                   )}
 
-                  {/* No lineup yet — still show quick-add for opponent */}
-                  {currentRoster.length===0 && !isMyBatting && (
+                  {/* No lineup yet — show quick-add for either team */}
+                  {currentRoster.length===0 && (
                     <div style={{padding:"6px 14px"}}>
-                      <button className="btn-sm blue" onClick={()=>setShowQuickAdd(true)}>+ Add Opponent Player</button>
+                      <button className="btn-sm blue" onClick={()=>setShowQuickAdd(true)}>+ Add Player</button>
                     </div>
                   )}
 
                   {/* Quick-add form */}
-                  {showQuickAdd && !isMyBatting && (
+                  {showQuickAdd && (
                     <div style={{padding:"10px 14px",background:"var(--navy3)",borderBottom:"1px solid var(--border)"}}>
-                      <div style={{fontSize:11,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Quick Add Player</div>
+                      <div style={{fontSize:11,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Quick Add — {isMyBatting?game.myTeamName:game.oppName}</div>
                       <div style={{display:"flex",gap:6,marginBottom:6}}>
                         <input
                           style={{width:64,padding:"8px",background:"var(--navy2)",border:"1px solid var(--gold)",borderRadius:8,color:"var(--white)",fontSize:16,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,textAlign:"center",outline:"none"}}
@@ -1283,11 +1290,11 @@ export default function BaseballApp() {
                           placeholder="Name (optional)"
                           value={quickAddName}
                           onChange={e=>setQuickAddName(e.target.value)}
-                          onKeyDown={e=>e.key==="Enter"&&quickAddOppPlayer()}
+                          onKeyDown={e=>e.key==="Enter"&&quickAddPlayer()}
                         />
                       </div>
                       <div className="row">
-                        <button className="btn-sm green" onClick={quickAddOppPlayer} disabled={!quickAddNum.trim()}>Add</button>
+                        <button className="btn-sm green" onClick={quickAddPlayer} disabled={!quickAddNum.trim()}>Add</button>
                         <button className="btn-sm" onClick={()=>{setShowQuickAdd(false);setQuickAddNum("");setQuickAddName("");}}>Cancel</button>
                       </div>
                     </div>
