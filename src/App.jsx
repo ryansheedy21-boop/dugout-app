@@ -1410,7 +1410,7 @@ export default function BaseballApp() {
                 }
               </>
             )}
-          </div>{/* end content-padded */}
+          </div>
         )}
 
         {/* ══ STATS ═══════════════════════════════════════════════════════════ */}
