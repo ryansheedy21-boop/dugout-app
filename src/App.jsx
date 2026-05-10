@@ -1120,7 +1120,7 @@ export default function BaseballApp() {
                   <div className="scoreboard">
                     <div className="score-header">
                       <span className="score-label">{game.myTeamName} vs {game.oppName}</span>
-                      <span className={`game-status ${game.final?"final":""}`}>{game.final?"FINAL":`INN ${game.inning} ${game.half==="top"?"▲":"▼"}`}</span>
+                      <span className={`game-status ${game.final?"final":""}`}>{game.final?"FINAL":`INN ${game.inning} ${game.half==="top"?"\u25b2":"\u25bc"}`}</span>
                     </div>
                     <div className="score-main">
                       <div className="team-score"><div className="t-name">{game.oppName}</div><div className="score-num">{them}</div></div>
@@ -1167,8 +1167,8 @@ export default function BaseballApp() {
                       <span style={{fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>INN</span>
                       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,lineHeight:1}}>{game.inning}</div>
                       <div style={{display:"flex",gap:3}}>
-                        <span className={`half-tag ${game.half==="top"?"active":""}`} onClick={()=>setGame(g=>({...g,half:"top"}))}>▲</span>
-                        <span className={`half-tag ${game.half==="bottom"?"active":""}`} onClick={()=>setGame(g=>({...g,half:"bottom"}))}>▼</span>
+                        <span className={`half-tag ${game.half==="top"?"active":""}`} onClick={()=>setGame(g=>({...g,half:"top"}))}>&#9650;</span>
+                        <span className={`half-tag ${game.half==="bottom"?"active":""}`} onClick={()=>setGame(g=>({...g,half:"bottom"}))}>&#9660;</span>
                       </div>
                     </div>
                     <div style={{marginLeft:"auto",display:"flex",flexDirection:"column",gap:3}}>
@@ -1322,7 +1322,7 @@ export default function BaseballApp() {
                           <div key={i} className="ab-log-item">
                             <span className={`ab-log-result result-${dr}`}>{dr}</span>
                             <span className="ab-log-name">#{entry.num} {entry.name}</span>
-                            <span className="ab-log-inn">I{entry.inning}{entry.half==="top"?"▲":"▼"} {entry.forUs?"US":"OPP"}</span>
+                            <span className="ab-log-inn">I{entry.inning}{entry.half==="top"?"\u25b2":"\u25bc"} {entry.forUs?"US":"OPP"}</span>
                           </div>
                         );
                       })}
@@ -1467,7 +1467,7 @@ export default function BaseballApp() {
                         <div style={{fontSize:11,color:"var(--muted)"}}>{g.date} · {pbp.length} plays logged</div>
                       </div>
                       <div className="score-pill">{g.usScore}–{g.themScore}</div>
-                      <div style={{fontSize:12,color:"var(--muted)",marginLeft:4}}>{isExpanded?"▲":"▼"}</div>
+                      <div style={{fontSize:12,color:"var(--muted)",marginLeft:4}}>{isExpanded?"\u25b2":"\u25bc"}</div>
                     </div>
                     {isExpanded && (
                       <div className="pbp-panel">
@@ -1475,7 +1475,7 @@ export default function BaseballApp() {
                           ? <div className="empty" style={{padding:"16px 0",fontSize:12}}>No plays logged.</div>
                           : Object.values(inningMap).map(({inning,half,plays})=>(
                             <div key={`${inning}-${half}`}>
-                              <div className="pbp-inning-header">Inning {inning} {half==="top"?"▲ Top":"▼ Bottom"} — {half==="bottom"?g.myTeamName:g.oppName} batting</div>
+                              <div className="pbp-inning-header">Inning {inning} {half==="top"?"\u25b2 Top":"\u25bc Bottom"} {half==="bottom"?g.myTeamName:g.oppName} batting</div>
                               {plays.map((entry,i)=>{const dr=entry.result==="K_OUT"?"K":entry.result;return(
                                 <div key={i} className="pbp-entry">
                                   <span className={`pbp-result result-${dr}`}>{dr}</span>
