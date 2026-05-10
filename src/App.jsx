@@ -1328,9 +1328,9 @@ export default function BaseballApp() {
                       })}
                     </div>
                   )}
-                </div>{/* end ab-panel */}
-                </div>{/* end score-col-right */}
-              </div>{/* end score-columns */}
+                </div>
+                </div>
+              </div>
             )}
           </>
         )}
