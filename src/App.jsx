@@ -185,6 +185,47 @@ const styles = `
   body { background:var(--navy); color:var(--white); font-family:'DM Sans',sans-serif; min-height:100vh; }
   .app { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 
+  /* ── iPad landscape two-column layout ── */
+  @media (min-width:768px) and (orientation:landscape) {
+    .app { max-width:100%; }
+    .header { padding:10px 24px 0; }
+    .header-title { font-size:22px; }
+    .nav-btn { font-size:11px; padding:8px 8px; }
+    .content { padding:0; overflow:hidden; }
+
+    /* Score tab two-column wrapper */
+    .score-columns {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      height:calc(100vh - 90px);
+      overflow:hidden;
+    }
+    .score-col-left {
+      padding:14px 12px 14px 16px;
+      overflow-y:auto;
+      border-right:1px solid var(--border);
+    }
+    .score-col-right {
+      padding:14px 16px 14px 12px;
+      overflow-y:auto;
+    }
+
+    /* Larger diamond on iPad */
+    .diamond-svg-wrap { width:260px; height:260px; }
+
+    /* Hit grid wider — 3 cols still but bigger buttons */
+    .hit-btn { padding:11px 4px; }
+    .hit-btn-icon { font-size:18px; }
+    .hit-btn-label { font-size:13px; }
+
+    /* Score numbers bigger */
+    .score-num { font-size:56px; }
+    .t-name { font-size:15px; }
+
+    /* Non-score tabs get normal padding back */
+    .content-padded { padding:16px; overflow-y:auto; height:calc(100vh - 90px); }
+  }
+
   /* Auth / setup screens */
   .center-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:32px; gap:20px; }
   .login-icon { font-size:64px; }
@@ -586,6 +627,11 @@ export default function BaseballApp() {
   const [fbSending, setFbSending] = useState(false);
   const [fbLog, setFbLog]         = useState([]);
 
+  // Quick-add opponent player from score screen
+  const [quickAddNum, setQuickAddNum]   = useState("");
+  const [quickAddName, setQuickAddName] = useState("");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => setUser(u||null));
@@ -824,17 +870,32 @@ export default function BaseballApp() {
     if (!homePlateConfirm) return;
     const { runner, forUs } = homePlateConfirm;
     if (outcome === "safe") {
-      // Run scores
       scoreRuns([runner], forUs);
       setAbLog(prev=>[{result:"RUN",name:runner.name,num:runner.number,inning:game.inning,half:game.half,forUs},...prev]);
     } else if (outcome === "out") {
-      // Out at home — increment out counter, log it
       setGame(g=>({...g, outs:Math.min(g.outs+1,3)}));
       setAbLog(prev=>[{result:"ROB",name:runner.name,num:runner.number,inning:game.inning,half:game.half,forUs},...prev]);
       if (forUs) setStats(prev=>prev.map(s=>s.id===runner.id?{...s,rob:(s.rob||0)+1}:s));
     } else if (outcome === "back") {
-      // Send runner back to 3rd
-      setGame(g=>({...g,[basesKey]:{...currentBases,third:runner}}));
+      // Send runner back to 3rd — if 3rd is occupied, cascade that runner back to 2nd
+      setGame(g => {
+        const bases = { ...g[basesKey] };
+        const displaced = bases.third; // whoever is currently on 3rd
+        bases.third = runner;
+        if (displaced && displaced.id !== runner.id) {
+          // Push displaced runner back to 2nd — if 2nd is also occupied, push to 1st
+          if (!bases.second) {
+            bases.second = displaced;
+          } else if (!bases.first) {
+            bases.first = displaced;
+          }
+          // If all bases occupied just place them on 2nd (overwrite — extremely rare)
+          else {
+            bases.second = displaced;
+          }
+        }
+        return { ...g, [basesKey]: bases };
+      });
     }
     setHomePlateConfirm(null);
   };
@@ -859,9 +920,9 @@ export default function BaseballApp() {
 
   // ── Roster management ─────────────────────────────────────────────────────
   const addMyPlayer = () => {
-    if (!newPlayer.name.trim()) return;
+    if (!newPlayer.number.trim()) return; // number required, name optional
     const maxOrder=myTeam.roster.length?Math.max(...myTeam.roster.map(p=>p.order)):0;
-    const p={id:Date.now(),name:newPlayer.name.trim(),number:newPlayer.number.trim(),pos:newPlayer.pos,order:maxOrder+1};
+    const p={id:Date.now(),name:newPlayer.name.trim()||`#${newPlayer.number.trim()}`,number:newPlayer.number.trim(),pos:newPlayer.pos,order:maxOrder+1};
     setMyTeam(t=>({...t,roster:[...t.roster,p]}));
     setStats(s=>[...s,mkStat(p.id)]);
     setNewPlayer({name:"",number:"",pos:"OF"}); setAddingPlayer(null);
@@ -873,14 +934,33 @@ export default function BaseballApp() {
     setOppTeams(prev=>[...prev,team]); setNewOppName(""); setAddingOpp(false); setRosterTeam(team.id);
   };
   const addOppPlayer = (teamId) => {
-    if (!newPlayer.name.trim()) return;
+    if (!newPlayer.number.trim()) return; // number required, name optional
     setOppTeams(prev=>prev.map(t=>{
       if (t.id!==teamId) return t;
       const maxOrder=t.roster.length?Math.max(...t.roster.map(p=>p.order)):0;
-      const p={id:Date.now(),name:newPlayer.name.trim(),number:newPlayer.number.trim(),pos:newPlayer.pos,order:maxOrder+1};
+      const p={id:Date.now(),name:newPlayer.name.trim()||`#${newPlayer.number.trim()}`,number:newPlayer.number.trim(),pos:newPlayer.pos,order:maxOrder+1};
       return {...t,roster:[...t.roster,p]};
     }));
     setNewPlayer({name:"",number:"",pos:"OF"}); setAddingPlayer(null);
+  };
+
+  // Quick-add opponent player directly from score screen
+  const quickAddOppPlayer = () => {
+    if (!quickAddNum.trim() || !game) return;
+    const oppName = game.oppName;
+    setOppTeams(prev => prev.map(t => {
+      if (t.name !== oppName) return t;
+      const maxOrder = t.roster.length ? Math.max(...t.roster.map(p=>p.order)) : 0;
+      const p = {
+        id: Date.now(),
+        name: quickAddName.trim() || `#${quickAddNum.trim()}`,
+        number: quickAddNum.trim(),
+        pos: "OF",
+        order: maxOrder + 1,
+      };
+      return { ...t, roster: [...t.roster, p] };
+    }));
+    setQuickAddNum(""); setQuickAddName(""); setShowQuickAdd(false);
   };
   const removeOppPlayer = (tid,pid) => setOppTeams(prev=>prev.map(t=>t.id!==tid?t:{...t,roster:t.roster.filter(p=>p.id!==pid)}));
   const removeOppTeam   = (tid) => { setOppTeams(prev=>prev.filter(t=>t.id!==tid)); if(rosterTeam===tid) setRosterTeam("my"); };
@@ -914,15 +994,17 @@ export default function BaseballApp() {
   const AddPlayerForm=({onSave,onCancel})=>(
     <div className="card" style={{marginBottom:10}}>
       <div className="form-label">New Player</div>
-      <input className="text-input" placeholder="Player name" value={newPlayer.name} onChange={e=>setNewPlayer(p=>({...p,name:e.target.value}))}/>
       <div className="form-row">
-        <input className="text-input" placeholder="#" value={newPlayer.number} onChange={e=>setNewPlayer(p=>({...p,number:e.target.value}))} style={{maxWidth:70}}/>
+        <input className="text-input" placeholder="# (required)" value={newPlayer.number} onChange={e=>setNewPlayer(p=>({...p,number:e.target.value}))} style={{maxWidth:90,marginBottom:0}}/>
+        <input className="text-input" placeholder="Name (optional)" value={newPlayer.name} onChange={e=>setNewPlayer(p=>({...p,name:e.target.value}))} style={{marginBottom:0}}/>
+      </div>
+      <div className="form-row" style={{marginTop:8}}>
         <select className="select-input" value={newPlayer.pos} onChange={e=>setNewPlayer(p=>({...p,pos:e.target.value}))}>
           {POSITIONS.map(pos=><option key={pos}>{pos}</option>)}
         </select>
       </div>
-      <div className="row">
-        <button className="btn-sm green" onClick={onSave}>Add Player</button>
+      <div className="row" style={{marginTop:8}}>
+        <button className="btn-sm green" onClick={onSave} disabled={!newPlayer.number.trim()}>Add Player</button>
         <button className="btn-sm" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -1031,50 +1113,50 @@ export default function BaseballApp() {
             )}
 
             {game && (
-              <>
-                {/* Scoreboard */}
-                <div className="scoreboard">
-                  <div className="score-header">
-                    <span className="score-label">{game.myTeamName} vs {game.oppName}</span>
-                    <span className={`game-status ${game.final?"final":""}`}>{game.final?"FINAL":`INN ${game.inning} ${game.half==="top"?"▲":"▼"}`}</span>
-                  </div>
-                  <div className="score-main">
-                    <div className="team-score"><div className="t-name">{game.oppName}</div><div className="score-num">{them}</div></div>
-                    <div className="score-divider">:</div>
-                    <div className="team-score"><div className="t-name us">{game.myTeamName}</div><div className="score-num us">{us}</div></div>
-                  </div>
-                  <div className="inning-row">
-                    <div className="inning-cell ih" style={{minWidth:26}}></div>
-                    {game.innings.map((_,i)=><div key={i} className="inning-cell ih">{i+1}</div>)}
-                    <div className="inning-cell ih tot">R</div>
-                  </div>
-                  {[["them",game.oppName],["us",game.myTeamName]].map(([team,label])=>(
-                    <div key={team} className="inning-row">
-                      <div className={`inning-cell ${team}`} style={{minWidth:26,fontSize:9}}>{label.slice(0,4).toUpperCase()}</div>
-                      {game.innings.map((inn,i)=><div key={i} className={`inning-cell ${team}`}>{inn[team]??"·"}</div>)}
-                      <div className={`inning-cell tot ${team}`}>{totalScore(game.innings,team)}</div>
+              <div className="score-columns">
+                {/* ── LEFT COLUMN: Scoreboard + Score controls + Count/Inning ── */}
+                <div className="score-col-left">
+                  {/* Scoreboard */}
+                  <div className="scoreboard">
+                    <div className="score-header">
+                      <span className="score-label">{game.myTeamName} vs {game.oppName}</span>
+                      <span className={`game-status ${game.final?"final":""}`}>{game.final?"FINAL":`INN ${game.inning} ${game.half==="top"?"▲":"▼"}`}</span>
                     </div>
-                  ))}
-                </div>
-
-                {/* Score +/- */}
-                <div className="score-controls">
-                  {[["us",game.myTeamName],["them",game.oppName]].map(([team,label])=>(
-                    <div key={team} className="score-ctrl">
-                      <div className={`ctrl-label ${team}`}>{label}</div>
-                      <div className="ctrl-btns">
-                        <button className="ctrl-btn" onClick={()=>adjustScore(team,-1)}>−</button>
-                        <div className={`ctrl-val ${team}`}>{totalScore(game.innings,team)}</div>
-                        <button className="ctrl-btn" onClick={()=>adjustScore(team,1)}>+</button>
+                    <div className="score-main">
+                      <div className="team-score"><div className="t-name">{game.oppName}</div><div className="score-num">{them}</div></div>
+                      <div className="score-divider">:</div>
+                      <div className="team-score"><div className="t-name us">{game.myTeamName}</div><div className="score-num us">{us}</div></div>
+                    </div>
+                    <div className="inning-row">
+                      <div className="inning-cell ih" style={{minWidth:26}}></div>
+                      {game.innings.map((_,i)=><div key={i} className="inning-cell ih">{i+1}</div>)}
+                      <div className="inning-cell ih tot">R</div>
+                    </div>
+                    {[["them",game.oppName],["us",game.myTeamName]].map(([team,label])=>(
+                      <div key={team} className="inning-row">
+                        <div className={`inning-cell ${team}`} style={{minWidth:26,fontSize:9}}>{label.slice(0,4).toUpperCase()}</div>
+                        {game.innings.map((inn,i)=><div key={i} className={`inning-cell ${team}`}>{inn[team]??"·"}</div>)}
+                        <div className={`inning-cell tot ${team}`}>{totalScore(game.innings,team)}</div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                {/* AT-BAT PANEL */}
-                <div className="ab-panel">
-                  {/* Count + Inning + Team toggle */}
-                  <div style={{background:"var(--navy3)",padding:"10px 14px",display:"flex",gap:10,alignItems:"center"}}>
+                  {/* Score +/- */}
+                  <div className="score-controls">
+                    {[["us",game.myTeamName],["them",game.oppName]].map(([team,label])=>(
+                      <div key={team} className="score-ctrl">
+                        <div className={`ctrl-label ${team}`}>{label}</div>
+                        <div className="ctrl-btns">
+                          <button className="ctrl-btn" onClick={()=>adjustScore(team,-1)}>−</button>
+                          <div className={`ctrl-val ${team}`}>{totalScore(game.innings,team)}</div>
+                          <button className="ctrl-btn" onClick={()=>adjustScore(team,1)}>+</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Count + Inning + Team toggle (left col on iPad) */}
+                  <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"10px 14px",display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                     {[["Balls",game.balls,"var(--gold2)"],["Strk",game.strikes,"var(--white)"],["Outs",game.outs,"var(--red)"]].map(([label,val,color])=>(
                       <div key={label} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",minWidth:44}}>
                         <span style={{fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>{label}</span>
@@ -1104,6 +1186,14 @@ export default function BaseballApp() {
                       </div>
                     </div>
                   </div>
+
+                  <button className="btn-outline" onClick={nextInning}>Next Half-Inning →</button>
+                  <button className="btn-outline gold" onClick={saveGame}>💾 Save Final Score</button>
+                  <button className="btn-outline red" onClick={()=>{setGame(null);setSelectedOppId(null);setAbLog([]);setAbTeamOverride(null);setUndoStack([]);}}>✕ Cancel Game</button>
+                </div>
+
+                {/* ── RIGHT COLUMN: AT-BAT panel (batter + diamond + hit buttons) ── */}
+                <div className="score-col-right">
 
                   {/* AT BAT label */}
                   <div style={{padding:"6px 14px 0",display:"flex",alignItems:"center",gap:6}}>
@@ -1157,6 +1247,49 @@ export default function BaseballApp() {
                           </div>
                         );
                       })}
+                      {/* Quick-add button — only show for opponent */}
+                      {!isMyBatting && (
+                        <div className="lineup-chip" style={{borderColor:"var(--blue)",minWidth:36}}
+                          onClick={()=>setShowQuickAdd(true)}>
+                          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"var(--blue)",lineHeight:1}}>+</div>
+                          <div className="lineup-chip-name" style={{color:"var(--blue)"}}>add</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No lineup yet — still show quick-add for opponent */}
+                  {currentRoster.length===0 && !isMyBatting && (
+                    <div style={{padding:"6px 14px"}}>
+                      <button className="btn-sm blue" onClick={()=>setShowQuickAdd(true)}>+ Add Opponent Player</button>
+                    </div>
+                  )}
+
+                  {/* Quick-add form */}
+                  {showQuickAdd && !isMyBatting && (
+                    <div style={{padding:"10px 14px",background:"var(--navy3)",borderBottom:"1px solid var(--border)"}}>
+                      <div style={{fontSize:11,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Quick Add Player</div>
+                      <div style={{display:"flex",gap:6,marginBottom:6}}>
+                        <input
+                          style={{width:64,padding:"8px",background:"var(--navy2)",border:"1px solid var(--gold)",borderRadius:8,color:"var(--white)",fontSize:16,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,textAlign:"center",outline:"none"}}
+                          placeholder="#"
+                          value={quickAddNum}
+                          maxLength={3}
+                          onChange={e=>setQuickAddNum(e.target.value)}
+                          autoFocus
+                        />
+                        <input
+                          style={{flex:1,padding:"8px",background:"var(--navy2)",border:"1px solid var(--border)",borderRadius:8,color:"var(--white)",fontSize:13,outline:"none"}}
+                          placeholder="Name (optional)"
+                          value={quickAddName}
+                          onChange={e=>setQuickAddName(e.target.value)}
+                          onKeyDown={e=>e.key==="Enter"&&quickAddOppPlayer()}
+                        />
+                      </div>
+                      <div className="row">
+                        <button className="btn-sm green" onClick={quickAddOppPlayer} disabled={!quickAddNum.trim()}>Add</button>
+                        <button className="btn-sm" onClick={()=>{setShowQuickAdd(false);setQuickAddNum("");setQuickAddName("");}}>Cancel</button>
+                      </div>
                     </div>
                   )}
 
@@ -1195,19 +1328,16 @@ export default function BaseballApp() {
                       })}
                     </div>
                   )}
-                </div>
-
-                <button className="btn-outline" onClick={nextInning}>Next Half-Inning →</button>
-                <button className="btn-outline gold" onClick={saveGame}>💾 Save Final Score</button>
-                <button className="btn-outline red" onClick={()=>{setGame(null);setSelectedOppId(null);setAbLog([]);setAbTeamOverride(null);setUndoStack([]);}}>✕ Cancel Game</button>
-              </>
+                </div>{/* end ab-panel */}
+                </div>{/* end score-col-right */}
+              </div>{/* end score-columns */}
             )}
           </>
         )}
 
         {/* ══ LINEUP ══════════════════════════════════════════════════════════ */}
         {tab==="roster" && (
-          <>
+          <div className="content-padded">
             <div className="team-tabs">
               <button className={`team-tab ${rosterTeam==="my"?"active":""}`} onClick={()=>setRosterTeam("my")}>{myTeam.name}</button>
               {oppTeams.map(t=><button key={t.id} className={`team-tab ${rosterTeam===t.id?"active":""}`} onClick={()=>setRosterTeam(t.id)}>{t.name}</button>)}
@@ -1281,12 +1411,12 @@ export default function BaseballApp() {
                 }
               </>
             )}
-          </>
+          </div>{/* end content-padded */}
         )}
 
         {/* ══ STATS ═══════════════════════════════════════════════════════════ */}
         {tab==="stats" && (
-          <>
+          <div className="content-padded">
             <div className="section-title">{myTeam.name} · Season Batting</div>
             <div className="card" style={{overflowX:"auto"}}>
               <table className="stats-table">
@@ -1313,12 +1443,12 @@ export default function BaseballApp() {
               </table>
             </div>
             <div style={{fontSize:11,color:"var(--muted)",textAlign:"center"}}>Tap + to adjust · Stats auto-track from at-bats &amp; baserunning</div>
-          </>
+          </div>
         )}
 
         {/* ══ HISTORY ═════════════════════════════════════════════════════════ */}
         {tab==="history" && (
-          <>
+          <div className="content-padded">
             <div className="section-title">Game History · {games.length} Games</div>
             {games.length===0 ? <div className="empty">No games saved yet.</div>
               : games.map(g=>{
@@ -1362,12 +1492,12 @@ export default function BaseballApp() {
                 );
               })
             }
-          </>
+          </div>
         )}
 
         {/* ══ TEAM ════════════════════════════════════════════════════════════ */}
         {tab==="team" && (
-          <>
+          <div className="content-padded">
             <div className="section-title">Your Team</div>
             <div className="card">
               <div style={{marginBottom:12}}>
@@ -1385,12 +1515,12 @@ export default function BaseballApp() {
               </div>
               <button className="btn-outline red" onClick={handleLeaveTeam}>Leave This Team</button>
             </div>
-          </>
+          </div>
         )}
 
         {/* ══ FEEDBACK ════════════════════════════════════════════════════════ */}
         {tab==="feedback" && (
-          <>
+          <div className="content-padded">
             <div className="section-title">Send Feedback</div>
             <div className="card">
               <div className="form-label" style={{marginBottom:8}}>What kind of feedback?</div>
@@ -1431,7 +1561,7 @@ export default function BaseballApp() {
                 💡 <strong style={{color:"var(--white)"}}>Tip:</strong> Use this during games to log anything that feels off. All feedback goes to Firebase where you can review it anytime.
               </div>
             </div>
-          </>
+          </div>
         )}
 
       </div>
