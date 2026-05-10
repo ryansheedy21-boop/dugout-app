@@ -1329,7 +1329,6 @@ export default function BaseballApp() {
                     </div>
                   )}
                 </div>
-                </div>
               </div>
             )}
           </>
