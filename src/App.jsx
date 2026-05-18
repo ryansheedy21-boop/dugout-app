@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp,
-  enableIndexedDbPersistence
+  enableMultiTabIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── REPLACE THIS with your Firebase config ────────────────────────────────────
@@ -28,14 +28,12 @@ const auth        = getAuth(firebaseApp);
 const db          = getFirestore(firebaseApp);
 const provider    = new GoogleAuthProvider();
 
-// ── Enable offline persistence ────────────────────────────────────────────────
-// Data saves locally on device and syncs to cloud when connection returns.
-enableIndexedDbPersistence(db).catch(err => {
+// ── Enable offline persistence (multi-device safe) ────────────────────────────
+// Supports multiple devices/tabs on the same account syncing correctly.
+enableMultiTabIndexedDbPersistence(db).catch(err => {
   if (err.code === "failed-precondition") {
-    // Multiple tabs open — persistence only works in one tab at a time
-    console.warn("Offline persistence unavailable: multiple tabs open.");
+    console.warn("Multi-tab persistence unavailable.");
   } else if (err.code === "unimplemented") {
-    // Browser doesn't support it (rare on modern iOS Safari)
     console.warn("Offline persistence not supported on this browser.");
   }
 });
@@ -106,7 +104,10 @@ async function loadTeamData(teamId) {
 
 async function saveTeamField(teamId, field, value) {
   try {
-    await setDoc(doc(db, teamDoc(teamId)), { [field]: JSON.stringify(value) }, { merge: true });
+    await setDoc(doc(db, teamDoc(teamId)), {
+      [field]: JSON.stringify(value),
+      lastUpdated: serverTimestamp(),
+    }, { merge: true });
   } catch (e) { console.error("saveTeamField:", e); }
 }
 
